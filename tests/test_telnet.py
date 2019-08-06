@@ -1,6 +1,11 @@
 import pytest
 
-from redclay.telnet import B, Tokenizer, CrlfTransformer
+from redclay.telnet import (
+    B,
+    Tokenizer,
+    StreamParser,
+    CrlfTransformer,
+)
 
 #
 # Tokenizer tests
@@ -42,6 +47,7 @@ def test_split_command(tokenizer):
         Tokenizer.StreamData(b'def'),
     ]
 
+
 def test_split_option(tokenizer):
     toks = tokenizer.tokens(b'abc' + B.IAC.byte + B.WONT.byte)
     assert toks == [ Tokenizer.StreamData(b'abc') ]
@@ -51,6 +57,125 @@ def test_split_option(tokenizer):
         Tokenizer.Option(B.WONT, 42),
         Tokenizer.StreamData(b'def'),
     ]
+
+
+#
+# StreamParser tests
+#
+
+@pytest.fixture
+def stream_parser():
+    return StreamParser()
+
+
+def test_stream_user_data(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.StreamData(b'Hello, world!')
+    ])
+    assert events == [
+        StreamParser.UserData('Hello, world!')
+    ]
+
+
+def test_stream_user_data_crlf(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.StreamData(b'Hello,\r\nworld!')
+    ])
+    assert events == [
+        StreamParser.UserData('Hello,'),
+        StreamParser.UserData('\n'),
+        StreamParser.UserData('world!'),
+    ]
+
+
+def test_stream_user_data_nonascii(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.StreamData(b'abc\xabdef')
+    ])
+    assert events == [
+        StreamParser.UserData('abcdef')
+    ]
+
+
+def test_stream_command(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.Command(B.NOP.value)
+    ])
+    assert events == [
+        StreamParser.UnhandledCommand(B.NOP.value)
+    ]
+
+
+def test_stream_iac(stream_parser):
+    # IAC IAC produces a single IAC on the user stream. This is not a valid
+    # ascii character, so it's filtered by decoding.
+    events = stream_parser.stream_updates([
+        Tokenizer.Command(B.IAC.value)
+    ])
+    assert events == []
+
+
+def test_stream_sb(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.Option(B.SB, 42),
+        Tokenizer.StreamData(b'1234'),
+        Tokenizer.Command(B.SE.value),
+    ])
+    assert events == [
+        StreamParser.UnhandledSubnegotiation(42)
+    ]
+
+
+def test_stream_will(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.Option(B.WILL, 42)
+    ])
+    assert events == [
+        StreamParser.OptionRequest(42, StreamParser.Host.PEER, True)
+    ]
+
+
+def test_stream_wont(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.Option(B.WONT, 42)
+    ])
+    assert events == [
+        StreamParser.OptionRequest(42, StreamParser.Host.PEER, False)
+    ]
+
+
+def test_stream_do(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.Option(B.DO, 42)
+    ])
+    assert events == [
+        StreamParser.OptionRequest(42, StreamParser.Host.LOCAL, True)
+    ]
+
+
+def test_stream_dont(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.Option(B.DONT, 42)
+    ])
+    assert events == [
+        StreamParser.OptionRequest(42, StreamParser.Host.LOCAL, False)
+    ]
+
+
+def test_stream_command_in_crlf(stream_parser):
+    events = stream_parser.stream_updates([
+        Tokenizer.StreamData(b'abc\r'),
+        Tokenizer.Command(B.NOP.value),
+        Tokenizer.StreamData(b'\ndef'),
+    ])
+    assert events == [
+        StreamParser.UserData('abc'),
+        StreamParser.UnhandledCommand(B.NOP.value),
+        StreamParser.UserData('\n'),
+        StreamParser.UserData('def'),
+    ]
+
+
 
 #
 # CrlfTransformer tests
@@ -115,3 +240,48 @@ def test_crlf_split_lf_bare(crlf):
 
     transformed = crlf.unstuff(b'def')
     assert transformed == b'def'
+
+#
+# integration
+#
+
+def test_integration(tokenizer, stream_parser):
+    data = (
+        b'Hel' +
+        B.IAC.byte + B.NOP.byte +
+        b'lo,\r' +
+        # start a subneg
+        B.IAC.byte + B.SB.byte + bytes([42]) +
+        b'abc' +
+        # literal IAC SE as subneg data
+        B.IAC.byte + B.IAC.byte + B.SE.byte +
+        b'def' +
+        # finish the subneg
+        B.IAC.byte + B.SE.byte +
+        b'\0wor' +
+        B.IAC.byte + B.DO.byte + bytes([42]) +
+        b'ld!'
+    )
+    atomized = [bytes([b]) for b in data]  # process it one byte at a time
+
+    toks = sum([tokenizer.tokens(b) for b in atomized], [])
+    events = sum([stream_parser.stream_updates([tok]) for tok in toks], [])
+
+    assert events == [
+        StreamParser.UserData('H'),
+        StreamParser.UserData('e'),
+        StreamParser.UserData('l'),
+        StreamParser.UnhandledCommand(B.NOP.value),
+        StreamParser.UserData('l'),
+        StreamParser.UserData('o'),
+        StreamParser.UserData(','),
+        StreamParser.UnhandledSubnegotiation(42),
+        StreamParser.UserData('\r'),
+        StreamParser.UserData('w'),
+        StreamParser.UserData('o'),
+        StreamParser.UserData('r'),
+        StreamParser.OptionRequest(42, StreamParser.Host.LOCAL, True),
+        StreamParser.UserData('l'),
+        StreamParser.UserData('d'),
+        StreamParser.UserData('!'),
+    ]

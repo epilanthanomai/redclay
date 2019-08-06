@@ -1,3 +1,4 @@
+import codecs
 import collections
 import enum
 
@@ -63,18 +64,15 @@ class Tokenizer:
 
     def _get_token_COMMAND(self, data):
         command_i = data[0]
-        if command_i == B.IAC.value:
-            return 1, self.StreamData(B.IAC.byte)
-        elif command_i in {
+        if command_i in {
             B.SB.value, B.WILL.value, B.WONT.value, B.DO.value, B.DONT.value
         }:
             self.state = self.State.OPTION
             self.command = B(command_i)
             return 1, None
         else:
-            command = B(command_i)
             self.state = self.State.DATA
-            return 1, self.Command(command)
+            return 1, self.Command(command_i)
 
     def _get_token_OPTION(self, data):
         option_b = data[0]
@@ -98,6 +96,142 @@ class Tokenizer:
 
     Option = collections.namedtuple(
         'Option', ['command', 'option']
+    )
+
+
+class StreamParser:
+    def __init__(self):
+        self.stream = self.Stream.USER
+        self.user_crlf = CrlfTransformer()
+        self.user_decoder = (
+            codecs.lookup('ascii')
+            .incrementaldecoder(errors='ignore')
+        )
+        self.subnegotiation_option = None
+
+    def stream_updates(self, tokens):
+        return list(self.gen_stream_updates(tokens))
+
+    def gen_stream_updates(self, tokens):
+        for token in tokens:
+            yield from self.handle_token(token)
+
+    def handle_token(self, token):
+        handler = getattr(self, 'token_' + token.__class__.__name__)
+        return handler(token)
+
+    # StreamData
+
+    def token_StreamData(self, token):
+        return self.handle_stream_data(token.data)
+
+    def handle_stream_data(self, data):
+        handler = getattr(self, 'streamData_' + self.stream.name)
+        return handler(data)
+
+    def streamData_USER(self, data):
+        chunks = self.user_crlf.gen_unstuffed_crlf(data)
+        decoded = (
+            self.user_decoder.decode(chunk)
+            for chunk in chunks
+        )
+        return (
+            self.UserData(chunk)
+            for chunk in decoded
+            if chunk
+        )
+
+    def streamData_SUBNEGOTIATION(self, data):
+        # For now we're ignoring all subneg data.
+        return []
+
+    # Command
+
+    def token_Command(self, token):
+        # NOTE: This handles commands in both user and subneg mode.
+        handler = self.get_command_handler(token.command)
+        if handler:
+            return handler(token)
+        else:
+            return [ self.UnhandledCommand(token.command) ]
+
+    def get_command_handler(self, command_i):
+        command = B.try_lookup(command_i)
+        if command is not None:
+            return getattr(self, 'command_' + command.name, None)
+
+    def command_SE(self, token):
+        if self.stream == self.Stream.SUBNEGOTIATION:
+            subneg = self.subnegotiation_option
+            self.subnegotiation_option = None
+            self.stream = self.Stream.USER
+            return [ self.UnhandledSubnegotiation(subneg) ]
+        else:
+            return [ self.UnhandledCommand(B.SE) ]
+
+    def command_IAC(self, token):
+        return self.handle_stream_data(B.IAC.byte)
+
+    # Option
+
+    def token_Option(self, token):
+        # NOTE: This handles commands in both user and subneg mode. It's not
+        # entirely clear what we should do if someone sends IAC WILL etc
+        # inside of a subnegotiation, but we'll try to handle them as
+        # commands. And IAC SB will override a subneg in process. This is
+        # probably a protocol error, so GIGO. OTOH maybe we should spit out
+        # an UnhandledCommand or something?
+        handler = getattr(self, 'option_' + token.command.name)
+        return handler(token)
+
+    def option_SB(self, token):
+        self.stream = self.Stream.SUBNEGOTIATION
+        self.subnegotiation_option = token.option
+        # We register the event when it's complete
+        return []
+
+    def option_WILL(self, token):
+        return [
+            self.OptionRequest(token.option, self.Host.PEER, True)
+        ]
+
+    def option_WONT(self, token):
+        return [
+            self.OptionRequest(token.option, self.Host.PEER, False)
+        ]
+
+    def option_DO(self, token):
+        return [
+            self.OptionRequest(token.option, self.Host.LOCAL, True)
+        ]
+
+    def option_DONT(self, token):
+        return [
+            self.OptionRequest(token.option, self.Host.LOCAL, False)
+        ]
+
+    class Stream(enum.Enum):
+        USER = enum.auto()
+        SUBNEGOTIATION = enum.auto()
+
+    class Host(enum.Enum):
+        LOCAL = enum.auto()
+        PEER = enum.auto()
+
+    UserData = collections.namedtuple(
+        'UserData', ['data']
+    )
+
+    OptionRequest = collections.namedtuple(
+        'OptionRequest', ['option', 'host', 'request']
+    )
+
+    UnhandledCommand = collections.namedtuple(
+        'UnhandledCommand', ['command']
+    )
+
+    UnhandledSubnegotiation = collections.namedtuple(
+        'UnhandledSubnegotiation', ['option']
     )
 
 
