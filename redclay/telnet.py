@@ -2,7 +2,20 @@ import collections
 import enum
 
 
-class B(enum.IntEnum):
+class ByteEnum(enum.IntEnum):
+    @property
+    def byte(self):
+        return bytes([self.value])
+
+    @classmethod
+    def try_lookup(cls, val):
+        try:
+            return cls(val)
+        except ValueError:
+            return None
+
+
+class B(ByteEnum):
     SE = 240
     NOP = 241
     DM = 242
@@ -19,17 +32,6 @@ class B(enum.IntEnum):
     DO = 253
     DONT = 254
     IAC = 255
-
-    @property
-    def byte(self):
-        return bytes([self.value])
-
-    @classmethod
-    def try_lookup(cls, val):
-        try:
-            return cls(val)
-        except ValueError:
-            return None
 
 
 class Tokenizer:
@@ -97,3 +99,47 @@ class Tokenizer:
     Option = collections.namedtuple(
         'Option', ['command', 'option']
     )
+
+
+class CrlfTransformer:
+    def __init__(self):
+        self.state = self.State.TEXT
+
+    def unstuff(self, data):
+        return b''.join(self.gen_unstuffed_crlf(data))
+
+    def gen_unstuffed_crlf(self, data):
+        while data:
+            unstuff = getattr(self, 'unstuff_' + self.state.name)
+            consumed, chunk = unstuff(data)
+            data = data[consumed:]
+            yield chunk
+
+    def unstuff_TEXT(self, data):
+        cr = data.find(self.Crlf.CR.byte)
+        if cr == -1:
+            return len(data), data
+        else:
+            self.state = self.State.CR
+            return cr + 1, data[:cr]
+
+    def unstuff_CR(self, data):
+        next_b = data[:1]
+        if next_b == self.Crlf.LF.byte:
+            self.state = self.State.TEXT
+            return 1, self.Crlf.LF.byte
+        elif next_b == self.Crlf.NUL.byte:
+            self.state = self.State.TEXT
+            return 1, self.Crlf.CR.byte
+        else:
+            self.state = self.State.TEXT
+            return 0, self.Crlf.CR.byte
+
+    class State(enum.Enum):
+        TEXT = enum.auto()
+        CR = enum.auto()
+
+    class Crlf(ByteEnum):
+        NUL = 0
+        LF = 10
+        CR = 13
