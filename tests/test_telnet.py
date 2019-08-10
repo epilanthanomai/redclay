@@ -4,6 +4,7 @@ from redclay.telnet import (
     B,
     Tokenizer,
     StreamParser,
+    StreamStuffer,
     CrlfTransformer,
 )
 
@@ -175,7 +176,31 @@ def test_stream_command_in_crlf(stream_parser):
         StreamParser.UserData('def'),
     ]
 
+#
+# StreamStuffer
+#
 
+@pytest.fixture
+def stuffer():
+    return StreamStuffer()
+
+
+def test_stuffer_text(stuffer):
+    stuffed = stuffer.stuff('abc')
+    assert stuffed == b'abc'
+
+
+def test_stuffer_nonascii(stuffer):
+    try:
+        stuffed = stuffer.stuff('abcdéf')
+        assert False  # should have thrown an exception
+    except UnicodeEncodeError:
+        pass  # expected behavior under test
+
+
+def test_stuffer_crlf(stuffer):
+    stuffed = stuffer.stuff('abc\ndef\rghi')
+    assert stuffed == b'abc\r\ndef\r\0ghi'
 
 #
 # CrlfTransformer tests
@@ -240,6 +265,22 @@ def test_crlf_split_lf_bare(crlf):
 
     transformed = crlf.unstuff(b'def')
     assert transformed == b'def'
+
+
+def test_crlf_stuff_text(crlf):
+    transformed = crlf.stuff(b'abc')
+    assert transformed == b'abc'
+
+
+def test_crlf_stuff_cr(crlf):
+    transformed = crlf.stuff(b'abc\rdef')
+    assert transformed == b'abc\r\0def'
+
+
+def tets_crlf_stuff_lf(crlf):
+    transformed = crlf.stuff(b'abd\ndef')
+    assert transformed == b'abc\r\ndef'
+
 
 #
 # integration

@@ -235,9 +235,36 @@ class StreamParser:
     )
 
 
+class StreamStuffer:
+    CODEC = codecs.lookup('ascii')
+
+    def stuff(self, user_data):
+        encoded, _ = self.encode(user_data)
+        crlf_stuffed = CrlfTransformer.stuff(encoded)
+        iac_stuffed = self.stuff_iac(crlf_stuffed)
+        return iac_stuffed
+
+    def encode(self, user_data):
+        return self.CODEC.encode(user_data)
+
+    def stuff_iac(self, data):
+        # NOTE: Technically we stuff IAC here, but in practice this will
+        # always be a no-op because we currently only accept ascii
+        # characters, and an ascii byte will never be 0xff.
+        return data.replace(B.IAC.byte, B.IAC.byte + B.IAC.byte)
+
+
 class CrlfTransformer:
     def __init__(self):
         self.state = self.State.TEXT
+
+    @classmethod
+    def stuff(self, data):
+        return (
+            data
+            .replace(b'\r', b'\r\0')
+            .replace(b'\n', b'\r\n')
+        )
 
     def unstuff(self, data):
         return b''.join(self.gen_unstuffed_crlf(data))
