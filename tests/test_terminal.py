@@ -113,7 +113,7 @@ async def test_input_ignores_commands(terminal):
     assert line == 'abc\n'
 
 
-async def test_input_ignores_options(terminal):
+async def test_input_rejects_options(terminal):
     terminal.reader.read.return_value = (
         b'abc' +
         B.IAC.byte + B.WILL.byte + bytes([6]) +
@@ -121,6 +121,10 @@ async def test_input_ignores_options(terminal):
     )
 
     line = await terminal.input('> ')
+    terminal.writer.write.assert_called_with(
+        B.IAC.byte + B.DONT.byte + bytes([6])
+    )
+    terminal.writer.drain.assert_called()
     assert line == 'abc\n'
 
 
