@@ -238,20 +238,38 @@ class StreamParser:
 class StreamStuffer:
     CODEC = codecs.lookup('ascii')
 
-    def stuff(self, user_data):
-        encoded, _ = self.encode(user_data)
+    def stuff(self, content):
+        serializer = getattr(
+            self,
+            'serialize_' + content.__class__.__name__
+        )
+        return serializer(content)
+
+    def serialize_UserData(self, user_data):
+        encoded, _ = self.encode(user_data.data)
         crlf_stuffed = CrlfTransformer.stuff(encoded)
         iac_stuffed = self.stuff_iac(crlf_stuffed)
         return iac_stuffed
 
-    def encode(self, user_data):
-        return self.CODEC.encode(user_data)
+    def encode(self, str_data):
+        return self.CODEC.encode(str_data)
 
     def stuff_iac(self, data):
         # NOTE: Technically we stuff IAC here, but in practice this will
         # always be a no-op because we currently only accept ascii
         # characters, and an ascii byte will never be 0xff.
         return data.replace(B.IAC.byte, B.IAC.byte + B.IAC.byte)
+
+    def serialize_OptionNegotiation(self, option):
+        command_byte = self.NEGOTIATE_COMMAND[option.host, option.state]
+        return B.IAC.byte + command_byte + bytes([option.option])
+
+    NEGOTIATE_COMMAND = {
+        (StreamParser.Host.LOCAL, True): B.WILL.byte,
+        (StreamParser.Host.LOCAL, False): B.WONT.byte,
+        (StreamParser.Host.PEER, True): B.DO.byte,
+        (StreamParser.Host.PEER, False): B.DONT.byte,
+    }
 
 
 class CrlfTransformer:

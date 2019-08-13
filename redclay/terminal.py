@@ -36,6 +36,9 @@ class Terminal:
         await asyncio.sleep(secs)
 
     async def write(self, text):
+        if isinstance(text, str):
+            text = StreamParser.UserData(text)
+
         # doesn't technically need to be async, but it did before and could
         # again. also, for consistency with the rest of the interface
         out_data = self.encoder.stuff(text)

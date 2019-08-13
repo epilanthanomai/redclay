@@ -186,21 +186,32 @@ def stuffer():
 
 
 def test_stuffer_text(stuffer):
-    stuffed = stuffer.stuff('abc')
+    stuffed = stuffer.stuff(StreamParser.UserData('abc'))
     assert stuffed == b'abc'
 
 
 def test_stuffer_nonascii(stuffer):
     try:
-        stuffed = stuffer.stuff('abcdéf')
+        stuffed = stuffer.stuff(StreamParser.UserData('abcdéf'))
         assert False  # should have thrown an exception
     except UnicodeEncodeError:
         pass  # expected behavior under test
 
 
 def test_stuffer_crlf(stuffer):
-    stuffed = stuffer.stuff('abc\ndef\rghi')
+    stuffed = stuffer.stuff(StreamParser.UserData('abc\ndef\rghi'))
     assert stuffed == b'abc\r\ndef\r\0ghi'
+
+
+def test_stuffer_option(stuffer):
+    stuffed = stuffer.stuff(
+        StreamParser.OptionNegotiation(6, StreamParser.Host.PEER, False)
+    )
+    assert stuffed == (
+        B.IAC.byte +
+        B.DONT.byte +
+        bytes([6])
+    )
 
 #
 # CrlfTransformer tests
