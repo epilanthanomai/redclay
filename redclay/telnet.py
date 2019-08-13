@@ -75,11 +75,11 @@ class Tokenizer:
             return 1, self.Command(command_i)
 
     def _get_token_OPTION(self, data):
-        option_b = data[0]
+        option_i = data[0]
         command = self.command
         self.command = None
         self.state = self.State.DATA
-        return 1, self.Option(command, option_b)
+        return 1, self.Option(command, option_i)
 
     class State(enum.Enum):
         DATA = enum.auto()
@@ -153,7 +153,7 @@ class StreamParser:
         if handler:
             return handler(token)
         else:
-            return [ self.UnhandledCommand(token.command) ]
+            return [ self.Command(token.command) ]
 
     def get_command_handler(self, command_i):
         command = B.try_lookup(command_i)
@@ -165,9 +165,9 @@ class StreamParser:
             subneg = self.subnegotiation_option
             self.subnegotiation_option = None
             self.stream = self.Stream.USER
-            return [ self.UnhandledSubnegotiation(subneg) ]
+            return [ self.OptionSubnegotiation(subneg) ]
         else:
-            return [ self.UnhandledCommand(B.SE) ]
+            return [ self.Command(B.SE) ]
 
     def command_IAC(self, token):
         return self.handle_stream_data(B.IAC.byte)
@@ -180,7 +180,7 @@ class StreamParser:
         # inside of a subnegotiation, but we'll try to handle them as
         # commands. And IAC SB will override a subneg in process. This is
         # probably a protocol error, so GIGO. OTOH maybe we should spit out
-        # an UnhandledCommand or something?
+        # a Command or something?
         handler = getattr(self, 'option_' + token.command.name)
         return handler(token)
 
@@ -192,22 +192,22 @@ class StreamParser:
 
     def option_WILL(self, token):
         return [
-            self.OptionRequest(token.option, self.Host.PEER, True)
+            self.OptionNegotiation(token.option, self.Host.PEER, True)
         ]
 
     def option_WONT(self, token):
         return [
-            self.OptionRequest(token.option, self.Host.PEER, False)
+            self.OptionNegotiation(token.option, self.Host.PEER, False)
         ]
 
     def option_DO(self, token):
         return [
-            self.OptionRequest(token.option, self.Host.LOCAL, True)
+            self.OptionNegotiation(token.option, self.Host.LOCAL, True)
         ]
 
     def option_DONT(self, token):
         return [
-            self.OptionRequest(token.option, self.Host.LOCAL, False)
+            self.OptionNegotiation(token.option, self.Host.LOCAL, False)
         ]
 
     class Stream(enum.Enum):
@@ -222,16 +222,16 @@ class StreamParser:
         'UserData', ['data']
     )
 
-    OptionRequest = collections.namedtuple(
-        'OptionRequest', ['option', 'host', 'request']
+    OptionNegotiation = collections.namedtuple(
+        'OptionNegotiation', ['option', 'host', 'state']
     )
 
-    UnhandledCommand = collections.namedtuple(
-        'UnhandledCommand', ['command']
+    Command = collections.namedtuple(
+        'Command', ['command']
     )
 
-    UnhandledSubnegotiation = collections.namedtuple(
-        'UnhandledSubnegotiation', ['option']
+    OptionSubnegotiation = collections.namedtuple(
+        'OptionSubnegotiation', ['option']
     )
 
 

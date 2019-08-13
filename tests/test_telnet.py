@@ -103,7 +103,7 @@ def test_stream_command(stream_parser):
         Tokenizer.Command(B.NOP.value)
     ])
     assert events == [
-        StreamParser.UnhandledCommand(B.NOP.value)
+        StreamParser.Command(B.NOP.value)
     ]
 
 
@@ -123,7 +123,7 @@ def test_stream_sb(stream_parser):
         Tokenizer.Command(B.SE.value),
     ])
     assert events == [
-        StreamParser.UnhandledSubnegotiation(42)
+        StreamParser.OptionSubnegotiation(42)
     ]
 
 
@@ -132,7 +132,7 @@ def test_stream_will(stream_parser):
         Tokenizer.Option(B.WILL, 42)
     ])
     assert events == [
-        StreamParser.OptionRequest(42, StreamParser.Host.PEER, True)
+        StreamParser.OptionNegotiation(42, StreamParser.Host.PEER, True)
     ]
 
 
@@ -141,7 +141,7 @@ def test_stream_wont(stream_parser):
         Tokenizer.Option(B.WONT, 42)
     ])
     assert events == [
-        StreamParser.OptionRequest(42, StreamParser.Host.PEER, False)
+        StreamParser.OptionNegotiation(42, StreamParser.Host.PEER, False)
     ]
 
 
@@ -150,7 +150,7 @@ def test_stream_do(stream_parser):
         Tokenizer.Option(B.DO, 42)
     ])
     assert events == [
-        StreamParser.OptionRequest(42, StreamParser.Host.LOCAL, True)
+        StreamParser.OptionNegotiation(42, StreamParser.Host.LOCAL, True)
     ]
 
 
@@ -159,7 +159,7 @@ def test_stream_dont(stream_parser):
         Tokenizer.Option(B.DONT, 42)
     ])
     assert events == [
-        StreamParser.OptionRequest(42, StreamParser.Host.LOCAL, False)
+        StreamParser.OptionNegotiation(42, StreamParser.Host.LOCAL, False)
     ]
 
 
@@ -171,7 +171,7 @@ def test_stream_command_in_crlf(stream_parser):
     ])
     assert events == [
         StreamParser.UserData('abc'),
-        StreamParser.UnhandledCommand(B.NOP.value),
+        StreamParser.Command(B.NOP.value),
         StreamParser.UserData('\n'),
         StreamParser.UserData('def'),
     ]
@@ -312,16 +312,16 @@ def test_integration(tokenizer, stream_parser):
         StreamParser.UserData('H'),
         StreamParser.UserData('e'),
         StreamParser.UserData('l'),
-        StreamParser.UnhandledCommand(B.NOP.value),
+        StreamParser.Command(B.NOP.value),
         StreamParser.UserData('l'),
         StreamParser.UserData('o'),
         StreamParser.UserData(','),
-        StreamParser.UnhandledSubnegotiation(42),
+        StreamParser.OptionSubnegotiation(42),
         StreamParser.UserData('\r'),
         StreamParser.UserData('w'),
         StreamParser.UserData('o'),
         StreamParser.UserData('r'),
-        StreamParser.OptionRequest(42, StreamParser.Host.LOCAL, True),
+        StreamParser.OptionNegotiation(42, StreamParser.Host.LOCAL, True),
         StreamParser.UserData('l'),
         StreamParser.UserData('d'),
         StreamParser.UserData('!'),
