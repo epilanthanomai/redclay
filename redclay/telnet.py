@@ -35,6 +35,10 @@ class B(ByteEnum):
     IAC = 255
 
 
+class OPTIONS(ByteEnum):
+    TM = 6
+
+
 class Tokenizer:
     def __init__(self):
         self.state = self.State.DATA
@@ -64,22 +68,22 @@ class Tokenizer:
 
     def _get_token_COMMAND(self, data):
         command_i = data[0]
-        if command_i in {
-            B.SB.value, B.WILL.value, B.WONT.value, B.DO.value, B.DONT.value
-        }:
+        command = B.try_lookup(command_i)
+        if command in { B.SB, B.WILL, B.WONT, B.DO, B.DONT }:
             self.state = self.State.OPTION
-            self.command = B(command_i)
+            self.command = command
             return 1, None
         else:
             self.state = self.State.DATA
-            return 1, self.Command(command_i)
+            return 1, self.Command(command, command_i)
 
     def _get_token_OPTION(self, data):
         option_i = data[0]
+        option = OPTIONS.try_lookup(option_i)
         command = self.command
         self.command = None
         self.state = self.State.DATA
-        return 1, self.Option(command, option_i)
+        return 1, self.Option(command, option, option_i)
 
     class State(enum.Enum):
         DATA = enum.auto()
@@ -91,11 +95,11 @@ class Tokenizer:
     )
 
     Command = collections.namedtuple(
-        'Command', ['command']
+        'Command', ['command', 'value']
     )
 
     Option = collections.namedtuple(
-        'Option', ['command', 'option']
+        'Option', ['command', 'option', 'value']
     )
 
 
@@ -107,7 +111,7 @@ class StreamParser:
             codecs.lookup('ascii')
             .incrementaldecoder(errors='ignore')
         )
-        self.subnegotiation_option = None
+        self.subnegotiation = None
 
     def stream_updates(self, tokens):
         return list(self.gen_stream_updates(tokens))
@@ -153,21 +157,22 @@ class StreamParser:
         if handler:
             return handler(token)
         else:
-            return [ self.Command(token.command) ]
+            return [ self.Command(token.command, token.value) ]
 
-    def get_command_handler(self, command_i):
-        command = B.try_lookup(command_i)
+    def get_command_handler(self, command):
         if command is not None:
             return getattr(self, 'command_' + command.name, None)
 
     def command_SE(self, token):
         if self.stream == self.Stream.SUBNEGOTIATION:
-            subneg = self.subnegotiation_option
-            self.subnegotiation_option = None
+            subneg = self.subnegotiation
+            self.subnegotiation = None
             self.stream = self.Stream.USER
-            return [ self.OptionSubnegotiation(subneg) ]
+            return [
+                self.OptionSubnegotiation(subneg.option, subneg.value)
+            ]
         else:
-            return [ self.Command(B.SE) ]
+            return [ self.Command(B.SE, B.SE.value) ]
 
     def command_IAC(self, token):
         return self.handle_stream_data(B.IAC.byte)
@@ -186,28 +191,36 @@ class StreamParser:
 
     def option_SB(self, token):
         self.stream = self.Stream.SUBNEGOTIATION
-        self.subnegotiation_option = token.option
+        self.subnegotiation = token
         # We register the event when it's complete
         return []
 
     def option_WILL(self, token):
         return [
-            self.OptionNegotiation(token.option, self.Host.PEER, True)
+            self.OptionNegotiation(
+                token.option, token.value, self.Host.PEER, True
+            )
         ]
 
     def option_WONT(self, token):
         return [
-            self.OptionNegotiation(token.option, self.Host.PEER, False)
+            self.OptionNegotiation(
+                token.option, token.value, self.Host.PEER, False
+            )
         ]
 
     def option_DO(self, token):
         return [
-            self.OptionNegotiation(token.option, self.Host.LOCAL, True)
+            self.OptionNegotiation(
+                token.option, token.value, self.Host.LOCAL, True
+            )
         ]
 
     def option_DONT(self, token):
         return [
-            self.OptionNegotiation(token.option, self.Host.LOCAL, False)
+            self.OptionNegotiation(
+                token.option, token.value, self.Host.LOCAL, False
+            )
         ]
 
     class Stream(enum.Enum):
@@ -222,16 +235,23 @@ class StreamParser:
         'UserData', ['data']
     )
 
-    OptionNegotiation = collections.namedtuple(
-        'OptionNegotiation', ['option', 'host', 'state']
-    )
+    class OptionNegotiation(
+        collections.namedtuple(
+            '_OptionNegotiation', ['option', 'value', 'host', 'state']
+        )
+    ):
+        def accept(self):
+            return self.__class__(self.option, self.value, self.host, True)
+
+        def refuse(self):
+            return self.__class__(self.option, self.value, self.host, False)
 
     Command = collections.namedtuple(
-        'Command', ['command']
+        'Command', ['command', 'value']
     )
 
     OptionSubnegotiation = collections.namedtuple(
-        'OptionSubnegotiation', ['option']
+        'OptionSubnegotiation', ['option', 'value']
     )
 
 
@@ -262,7 +282,7 @@ class StreamStuffer:
 
     def serialize_OptionNegotiation(self, option):
         command_byte = self.NEGOTIATE_COMMAND[option.host, option.state]
-        return B.IAC.byte + command_byte + bytes([option.option])
+        return B.IAC.byte + command_byte + bytes([option.value])
 
     NEGOTIATE_COMMAND = {
         (StreamParser.Host.LOCAL, True): B.WILL.byte,
