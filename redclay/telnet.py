@@ -36,6 +36,7 @@ class B(ByteEnum):
 
 
 class OPTIONS(ByteEnum):
+    ECHO = 1
     TM = 6
 
 
@@ -241,10 +242,14 @@ class StreamParser:
         )
     ):
         def accept(self):
-            return self.__class__(self.option, self.value, self.host, True)
+            return self.__class__(
+                self.option, self.value, self.host, self.state
+            )
 
         def refuse(self):
-            return self.__class__(self.option, self.value, self.host, False)
+            return self.__class__(
+                self.option, self.value, self.host, not self.state
+            )
 
     Command = collections.namedtuple(
         'Command', ['command', 'value']

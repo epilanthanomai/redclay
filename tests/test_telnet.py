@@ -179,7 +179,7 @@ def test_stream_dont(stream_parser):
     ]
 
 
-def test_accept_negotiation():
+def test_accept_positive_negotiation():
     opt = StreamParser.OptionNegotiation(
         OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, True
     )
@@ -188,12 +188,30 @@ def test_accept_negotiation():
     )
 
 
-def test_reject_negotiation():
+def test_reject_positive_negotiation():
     opt = StreamParser.OptionNegotiation(
         OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, True
     )
     assert opt.refuse() == StreamParser.OptionNegotiation(
         OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, False
+    )
+
+
+def test_accept_negative_negotiation():
+    opt = StreamParser.OptionNegotiation(
+        OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, False
+    )
+    assert opt.accept() == StreamParser.OptionNegotiation(
+        OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, False
+    )
+
+
+def test_reject_negative_negotiation():
+    opt = StreamParser.OptionNegotiation(
+        OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, False
+    )
+    assert opt.refuse() == StreamParser.OptionNegotiation(
+        OPTIONS.TM, OPTIONS.TM.value, StreamParser.Host.LOCAL, True
     )
 
 

@@ -165,6 +165,23 @@ async def test_input_ignores_subnegotiations(terminal):
     assert line == 'abc\n'
 
 
+async def test_input_secret_simple_line(terminal):
+    terminal.reader.read.return_value = b'abc\r\n'
+
+    line = await terminal.input_secret('> ')
+
+    terminal.writer.write.assert_any_call(b'> ')
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.WILL.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.write.assert_any_call(b'\r\n')
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.WONT.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.drain.assert_called()
+    assert line == 'abc\n'
+
+
 async def test_input_handles_interrupt_with_tm(terminal):
     # Typically when the user hits ^C the peer will send IAC IP IAC DO TM
     # and then ignore everything until it receivs IAC WILL TM. This tests
@@ -310,3 +327,76 @@ async def test_interrupt_tm_split(terminal):
         call(B.IAC.byte + B.WILL.byte + OPTIONS.TM.byte),
     ]
     terminal.writer.drain.assert_called()
+
+
+async def test_input_secret_peer_refuse_echo(terminal):
+    terminal.reader.read.return_value = (
+        B.IAC.byte + B.DONT.byte + OPTIONS.ECHO.byte +
+        b'abc\r\n'
+    )
+
+    line = await terminal.input_secret('> ')
+
+    terminal.writer.write.assert_any_call(b'> ')
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.WILL.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.write.assert_any_call(b'\r\n')
+    terminal.writer.drain.assert_called()
+    assert line == 'abc\n'
+
+
+async def test_input_secret_peer_accepts_then_disables_echo(terminal):
+    terminal.reader.read.return_value = (
+        B.IAC.byte + B.DO.byte + OPTIONS.ECHO.byte +
+        b'abc' +
+        B.IAC.byte + B.DONT.byte + OPTIONS.ECHO.byte +
+        b'\r\n'
+    )
+
+    line = await terminal.input_secret('> ')
+
+    terminal.writer.write.assert_any_call(b'> ')
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.WILL.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.WONT.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.write.assert_any_call(b'\r\n')
+    terminal.writer.drain.assert_called()
+    assert line == 'abc\n'
+
+
+async def test_input_refuses_peer_echo_request(terminal):
+    terminal.reader.read.return_value = (
+        b'abc' +
+        B.IAC.byte + B.WILL.byte + OPTIONS.ECHO.byte +
+        b'\r\n'
+    )
+
+    line = await terminal.input('> ')
+
+    terminal.writer.write.assert_any_call(b'> ')
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.DONT.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.drain.assert_called()
+    assert line == 'abc\n'
+
+
+async def test_input_refuses_local_echo_request(terminal):
+    terminal.reader.read.return_value = (
+        b'abc' +
+        B.IAC.byte + B.DO.byte + OPTIONS.ECHO.byte +
+        b'\r\n'
+    )
+
+    line = await terminal.input('> ')
+
+    terminal.writer.write.assert_any_call(b'> ')
+    terminal.writer.write.assert_any_call(
+        B.IAC.byte + B.WONT.byte + OPTIONS.ECHO.byte
+    )
+    terminal.writer.drain.assert_called()
+    assert line == 'abc\n'

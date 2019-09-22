@@ -4,7 +4,7 @@ import contextlib
 import enum
 import logging
 
-from redclay.telnet import StreamStuffer, Tokenizer, StreamParser
+from redclay.telnet import OPTIONS, StreamStuffer, Tokenizer, StreamParser
 from redclay.textutil import LineBuffer
 
 
@@ -24,6 +24,12 @@ class Terminal:
         self.line_buffer = LineBuffer()
         self.update_buffer = []
         self.prompt_mgr = None
+        self.echo_state = EchoOptionState()
+
+        logger.debug(
+            f'new term:{id(self)} '
+            f'with echo opt:{id(self.echo_state)}'
+        )
 
     async def __aenter__(self):
         return self
@@ -69,12 +75,23 @@ class Terminal:
 
     async def input(self, prompt):
         with self.prompt(prompt):
-            while True:
-                line = await self._input()
-                if line:
-                    return line
+            return await self._input_line()
 
-    async def _input(self):
+    async def input_secret(self, prompt):
+        with self.prompt(prompt):
+            async with self.echo_off():
+                result = await self._input_line()
+                # echo peer's LF
+                await self.write('\n')
+                return result
+
+    async def _input_line(self):
+        while True:
+            line = await self._handle_input_once()
+            if line:
+                return line
+
+    async def _handle_input_once(self):
         await self.require_line_buffer()
 
         annotations, line = self.line_buffer.pop()
@@ -110,6 +127,22 @@ class Terminal:
 
     async def annotation_TimingMark(self, annotation):
         await self.write(annotation.option.accept(), drain=True)
+
+    #
+    # locally requested state changes
+    #
+
+    @contextlib.asynccontextmanager
+    async def echo_off(self):
+        # The way we turn echo off is by turning on the server echo option
+        # and then just not echoing anythiing.
+        await self.write(self.echo_state.local_request(True), drain=True)
+        try:
+            yield
+        finally:
+            await self.write(
+                self.echo_state.local_request(False), drain=True
+            )
 
     #
     # input stream updates
@@ -158,6 +191,9 @@ class Terminal:
 
         # otherwise client is sending us a TM, which we didn't request. ignore it.
         logger.debug(f'ignoring unrequested request:{request} on term:{id(self)}')
+
+    def option_ECHO(self, request):
+        return self.echo_state.handle_negotiation(request)
 
     def option_unhandled(self, request):
         if request.state:
@@ -229,3 +265,88 @@ class Prompt:
 
     def mark_interrupt(self):
         self.state = self.PromptState.INTERRUPT
+
+
+class EchoOptionState:
+    class State(enum.Enum):
+        OFF = enum.auto()
+        REQUESTED = enum.auto()
+        ON = enum.auto()
+
+    def __init__(self):
+        self.state = self.State.OFF
+
+    # host-directed negotiation
+
+    def local_request(self, state):
+        handler = getattr(self, f'local_{self.state.name}')
+        return handler(state)
+
+    def local_OFF(self, state):
+        if state:
+            logger.debug(f'REQUESTING host echo on opt:{id(self)}')
+            self.state = self.State.REQUESTED
+            return self.make_negotiation(True)
+        # Else currently off, host wants off.
+
+    def local_REQUESTED(self, state):
+        if state:
+            # We've already requested, nothing new to do.
+            pass
+        else:
+            logger.debug(f'CANCELING host echo request on opt:{id(self)}')
+            return self.make_negotiation(False)
+
+    def local_ON(self, state):
+        if state:
+            # We're already on, nothing new to do.
+            pass
+        else:
+            logger.debug(f'DEMANDING host echo off on opt:{id(self)}')
+            return self.make_negotiation(False)
+
+    def make_negotiation(self, state):
+        return StreamParser.OptionNegotiation(
+            OPTIONS.ECHO, OPTIONS.ECHO.value, StreamParser.Host.LOCAL, state
+        )
+
+    # handle peer negotiation commands
+
+    def handle_negotiation(self, neg):
+        handler = getattr(self, f'negotiation_{neg.host.name}')
+        return handler(neg)
+
+    def negotiation_PEER(self, neg):
+        # We never approve peer echo. It's always off, so if peer says off
+        # then it's noop, and if peer requests on then we refuse.
+        if neg.state:
+            logger.debug('REFUSING peer echo request on opt:{id(self)}')
+            return neg.refuse()
+
+    def negotiation_LOCAL(self, neg):
+        handler = getattr(self, f'negotiation_LOCAL_{self.state.name}')
+        return handler(neg)
+
+    def negotiation_LOCAL_OFF(self, neg):
+        if neg.state:
+            # Peer requesting on. Refuse.
+            logger.debug('REFUSING host echo request on opt:{id(self)}')
+            return neg.refuse()
+        # Otherwise peer affirming off. No-op.
+
+    def negotiation_LOCAL_REQUESTED(self, neg):
+        if neg.state:
+            logger.debug('peer ACCEPTED host echo on opt:{id(self)}')
+            self.state = self.State.ON
+        else:
+            logger.debug('peer REFUSED host echo on opt:{id(self)}')
+            self.state = self.State.OFF
+
+    def negotiation_LOCAL_ON(self, neg):
+        if neg.state:
+            # Peer affirming on. No-op.
+            pass
+        else:
+            logger.debug('peer DEMANDING no host echo on opt:{id(self)}')
+            self.state = self.State.OFF
+            return neg.accept()

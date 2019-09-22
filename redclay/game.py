@@ -103,7 +103,7 @@ class Shell:
             )
 
     async def input_password(self):
-        raw_password = await self.term.input('Password: ')
+        raw_password = await self.term.input_secret('Password: ')
         return raw_password.rstrip('\n')
 
     def authenticate(self, username, password):
