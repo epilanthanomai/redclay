@@ -15,7 +15,7 @@ before_deploy:
 deploy:
   - provider: script
     on:
-      branch: master
+      branch: latest
     script: |
       docker tag redclay epilanthanomai/redclay:latest &&
       docker push epilanthanomai/redclay:latest
