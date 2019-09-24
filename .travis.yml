@@ -16,12 +16,10 @@ deploy:
   - provider: script
     on:
       branch: latest
-    script: |
-      docker tag redclay epilanthanomai/redclay:latest &&
-      docker push epilanthanomai/redclay:latest
+    script:
+      - docker tag redclay epilanthanomai/redclay:latest && docker push epilanthanomai/redclay:latest
   - provider: script
     on:
       tags: true
-    script: |
-      docker tag redclay epilanthanomai/redclay:$TRAVIS_TAG &&
-      docker push epilanthanomai/redclay:$TRAVIS_TAG
+    script:
+      - docker tag redclay epilanthanomai/redclay:$TRAVIS_TAG && docker push epilanthanomai/redclay:$TRAVIS_TAG
