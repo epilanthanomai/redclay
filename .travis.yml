@@ -1,6 +1,26 @@
 language: python
 python: "3.7"
+services: docker
+
 install:
   - pip install pipenv
   - pipenv install --dev
-script: pipenv run python -m pytest
+script:
+  - pipenv run python -m pytest
+  - docker build -t redclay .
+
+before_deploy:
+  - echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+deploy:
+  - provider: script
+    on:
+      branch: master
+    script: |
+      docker tag redclay epilanthanomai/redclay:latest &&
+      docker push epilanthanomai/redclay:latest
+  - provider: script
+    on:
+      tags: true
+    script: |
+      docker tag redclay epilanthanomai/redclay:$TRAVIS_TAG &&
+      docker push epilanthanomai/redclay:$TRAVIS_TAG
