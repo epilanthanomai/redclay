@@ -124,7 +124,7 @@ class Shell:
 
 async def run_server():
     server = await asyncio.start_server(
-        Shell.run_client, '127.0.0.1', 6666)
+        Shell.run_client, '0.0.0.0', 6666)
     async with server:
         await server.serve_forever()
 

@@ -1,0 +1,13 @@
+.git
+.travis.yml
+tox.ini
+tests
+README.md
+
+**/*.pyc
+**/__pycache__
+.pytest_cache
+.tox
+
+**/.*.sw*
+.vim*
