@@ -7,8 +7,12 @@ verify_ssl = true
 asynctest = "*"
 pytest = "*"
 pytest-asyncio = "*"
+black = "*"
 
 [packages]
 
 [requires]
 python_version = "3.7"
+
+[pipenv]
+allow_prereleases = true

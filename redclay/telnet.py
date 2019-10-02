@@ -50,7 +50,7 @@ class Tokenizer:
 
     def gen_tokens(self, data):
         while data:
-            get_token = getattr(self, '_get_token_' + self.state.name)
+            get_token = getattr(self, "_get_token_" + self.state.name)
             consumed, token = get_token(data)
             data = data[consumed:]
             if token is not None:
@@ -70,7 +70,7 @@ class Tokenizer:
     def _get_token_COMMAND(self, data):
         command_i = data[0]
         command = B.try_lookup(command_i)
-        if command in { B.SB, B.WILL, B.WONT, B.DO, B.DONT }:
+        if command in {B.SB, B.WILL, B.WONT, B.DO, B.DONT}:
             self.state = self.State.OPTION
             self.command = command
             return 1, None
@@ -91,27 +91,18 @@ class Tokenizer:
         COMMAND = enum.auto()
         OPTION = enum.auto()
 
-    StreamData = collections.namedtuple(
-        'StreamData', ['data']
-    )
+    StreamData = collections.namedtuple("StreamData", ["data"])
 
-    Command = collections.namedtuple(
-        'Command', ['command', 'value']
-    )
+    Command = collections.namedtuple("Command", ["command", "value"])
 
-    Option = collections.namedtuple(
-        'Option', ['command', 'option', 'value']
-    )
+    Option = collections.namedtuple("Option", ["command", "option", "value"])
 
 
 class StreamParser:
     def __init__(self):
         self.stream = self.Stream.USER
         self.user_crlf = CrlfTransformer()
-        self.user_decoder = (
-            codecs.lookup('ascii')
-            .incrementaldecoder(errors='ignore')
-        )
+        self.user_decoder = codecs.lookup("ascii").incrementaldecoder(errors="ignore")
         self.subnegotiation = None
 
     def stream_updates(self, tokens):
@@ -122,7 +113,7 @@ class StreamParser:
             yield from self.handle_token(token)
 
     def handle_token(self, token):
-        handler = getattr(self, 'token_' + token.__class__.__name__)
+        handler = getattr(self, "token_" + token.__class__.__name__)
         return handler(token)
 
     # StreamData
@@ -131,20 +122,13 @@ class StreamParser:
         return self.handle_stream_data(token.data)
 
     def handle_stream_data(self, data):
-        handler = getattr(self, 'streamData_' + self.stream.name)
+        handler = getattr(self, "streamData_" + self.stream.name)
         return handler(data)
 
     def streamData_USER(self, data):
         chunks = self.user_crlf.gen_unstuffed_crlf(data)
-        decoded = (
-            self.user_decoder.decode(chunk)
-            for chunk in chunks
-        )
-        return (
-            self.UserData(chunk)
-            for chunk in decoded
-            if chunk
-        )
+        decoded = (self.user_decoder.decode(chunk) for chunk in chunks)
+        return (self.UserData(chunk) for chunk in decoded if chunk)
 
     def streamData_SUBNEGOTIATION(self, data):
         # For now we're ignoring all subneg data.
@@ -158,22 +142,20 @@ class StreamParser:
         if handler:
             return handler(token)
         else:
-            return [ self.Command(token.command, token.value) ]
+            return [self.Command(token.command, token.value)]
 
     def get_command_handler(self, command):
         if command is not None:
-            return getattr(self, 'command_' + command.name, None)
+            return getattr(self, "command_" + command.name, None)
 
     def command_SE(self, token):
         if self.stream == self.Stream.SUBNEGOTIATION:
             subneg = self.subnegotiation
             self.subnegotiation = None
             self.stream = self.Stream.USER
-            return [
-                self.OptionSubnegotiation(subneg.option, subneg.value)
-            ]
+            return [self.OptionSubnegotiation(subneg.option, subneg.value)]
         else:
-            return [ self.Command(B.SE, B.SE.value) ]
+            return [self.Command(B.SE, B.SE.value)]
 
     def command_IAC(self, token):
         return self.handle_stream_data(B.IAC.byte)
@@ -187,7 +169,7 @@ class StreamParser:
         # commands. And IAC SB will override a subneg in process. This is
         # probably a protocol error, so GIGO. OTOH maybe we should spit out
         # a Command or something?
-        handler = getattr(self, 'option_' + token.command.name)
+        handler = getattr(self, "option_" + token.command.name)
         return handler(token)
 
     def option_SB(self, token):
@@ -197,31 +179,21 @@ class StreamParser:
         return []
 
     def option_WILL(self, token):
-        return [
-            self.OptionNegotiation(
-                token.option, token.value, self.Host.PEER, True
-            )
-        ]
+        return [self.OptionNegotiation(token.option, token.value, self.Host.PEER, True)]
 
     def option_WONT(self, token):
         return [
-            self.OptionNegotiation(
-                token.option, token.value, self.Host.PEER, False
-            )
+            self.OptionNegotiation(token.option, token.value, self.Host.PEER, False)
         ]
 
     def option_DO(self, token):
         return [
-            self.OptionNegotiation(
-                token.option, token.value, self.Host.LOCAL, True
-            )
+            self.OptionNegotiation(token.option, token.value, self.Host.LOCAL, True)
         ]
 
     def option_DONT(self, token):
         return [
-            self.OptionNegotiation(
-                token.option, token.value, self.Host.LOCAL, False
-            )
+            self.OptionNegotiation(token.option, token.value, self.Host.LOCAL, False)
         ]
 
     class Stream(enum.Enum):
@@ -232,42 +204,31 @@ class StreamParser:
         LOCAL = enum.auto()
         PEER = enum.auto()
 
-    UserData = collections.namedtuple(
-        'UserData', ['data']
-    )
+    UserData = collections.namedtuple("UserData", ["data"])
 
     class OptionNegotiation(
         collections.namedtuple(
-            '_OptionNegotiation', ['option', 'value', 'host', 'state']
+            "_OptionNegotiation", ["option", "value", "host", "state"]
         )
     ):
         def accept(self):
-            return self.__class__(
-                self.option, self.value, self.host, self.state
-            )
+            return self.__class__(self.option, self.value, self.host, self.state)
 
         def refuse(self):
-            return self.__class__(
-                self.option, self.value, self.host, not self.state
-            )
+            return self.__class__(self.option, self.value, self.host, not self.state)
 
-    Command = collections.namedtuple(
-        'Command', ['command', 'value']
-    )
+    Command = collections.namedtuple("Command", ["command", "value"])
 
     OptionSubnegotiation = collections.namedtuple(
-        'OptionSubnegotiation', ['option', 'value']
+        "OptionSubnegotiation", ["option", "value"]
     )
 
 
 class StreamStuffer:
-    CODEC = codecs.lookup('ascii')
+    CODEC = codecs.lookup("ascii")
 
     def stuff(self, content):
-        serializer = getattr(
-            self,
-            'serialize_' + content.__class__.__name__
-        )
+        serializer = getattr(self, "serialize_" + content.__class__.__name__)
         return serializer(content)
 
     def serialize_UserData(self, user_data):
@@ -303,18 +264,14 @@ class CrlfTransformer:
 
     @classmethod
     def stuff(self, data):
-        return (
-            data
-            .replace(b'\r', b'\r\0')
-            .replace(b'\n', b'\r\n')
-        )
+        return data.replace(b"\r", b"\r\0").replace(b"\n", b"\r\n")
 
     def unstuff(self, data):
-        return b''.join(self.gen_unstuffed_crlf(data))
+        return b"".join(self.gen_unstuffed_crlf(data))
 
     def gen_unstuffed_crlf(self, data):
         while data:
-            unstuff = getattr(self, 'unstuff_' + self.state.name)
+            unstuff = getattr(self, "unstuff_" + self.state.name)
             consumed, chunk = unstuff(data)
             data = data[consumed:]
             yield chunk
