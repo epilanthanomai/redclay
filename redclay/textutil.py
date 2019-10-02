@@ -1,7 +1,7 @@
 class LineBuffer:
     def __init__(self):
         self.lines = []
-        self.chars = ''
+        self.chars = ""
         self.annotations = []
 
     def has_line(self):
@@ -9,7 +9,7 @@ class LineBuffer:
 
     def push(self):
         self.lines.append((self.annotations, self.chars))
-        self.chars = ''
+        self.chars = ""
         self.annotations = []
 
     def pop(self):
@@ -20,12 +20,12 @@ class LineBuffer:
 
     def append(self, text):
         while text:
-            nl = text.find('\n')
+            nl = text.find("\n")
             if nl == -1:
                 self.chars += text
-                text = ''
+                text = ""
             else:
-                line, text = text[:nl + 1], text[nl + 1:]
+                line, text = text[: nl + 1], text[nl + 1 :]
                 self.chars += line
                 self.push()
 
@@ -45,4 +45,4 @@ class LineBuffer:
 
     def clear(self):
         self.lines = []
-        self.chars = ''
+        self.chars = ""
