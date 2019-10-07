@@ -8,6 +8,7 @@ asynctest = "*"
 pytest = "*"
 pytest-asyncio = "*"
 black = "*"
+pre-commit = "*"
 
 [packages]
 
