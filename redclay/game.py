@@ -54,15 +54,27 @@ class PasswordPrompt:
 
     async def handle_input(self, conn, password):
         username = conn["username"]
-        if password and username[-1] == password[-1]:
+        account = self.authenticate(conn, username, password)
+        if account:
             logger.info("successful login", extra={"user": username})
-            await conn.pop(username=username)
+            await conn.pop(account=account)
             await conn.send_message(self.WELCOME.format(user=username))
             await conn.push(tag="cmdloop", prompt=CommandPrompt())
         else:
             logger.info("failed login", extra={"user": username})
             await conn.send_message("Login failed.\n\n")
             await fail_actions(conn)
+
+    def authenticate(self, conn, username, password):
+        if not password:
+            return
+        account = (
+            conn.session.query(Account)
+            .filter(Account.username == username)
+            .one_or_none()
+        )
+        if account is not None and account.authenticate(password):
+            return account
 
 
 class CommandPrompt:
@@ -73,7 +85,7 @@ class CommandPrompt:
     )
 
     def prompt(self, conn):
-        return f"{conn['username']}> "
+        return f"{conn['account'].username}> "
 
     async def handle_input(self, conn, line):
         if line == "quit":

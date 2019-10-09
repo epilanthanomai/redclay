@@ -30,6 +30,9 @@ class Account(Base):
     def valid_username(cls, username):
         return bool(cls.USERNAME_RE.match(username))
 
+    def authenticate(self, password):
+        return crypt(password, self.passhash) == self.passhash
+
 
 @subcommand(argument("username"))
 def create_account(session, username):
