@@ -1,17 +1,13 @@
 import argparse
 import importlib
 
+from redclay.funcutil import cached
+
 
 class ArgumentParser(argparse.ArgumentParser):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._subparsers = None
-
-    @property
+    @cached
     def subparsers(self):
-        if self._subparsers is None:
-            self._subparsers = self.add_subparsers()
-        return self._subparsers
+        return self.add_subparsers()
 
     def add_subcommand(self, spec):
         subcommand = getattr(spec, "redclay_subcommand", None) or self.load_subcommand(
