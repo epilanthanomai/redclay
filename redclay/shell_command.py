@@ -1,7 +1,9 @@
 import argparse
+import contextlib
 import importlib
 import inspect
 
+from redclay.dbsession import managed_session
 from redclay.funcutil import cached
 
 
@@ -38,17 +40,19 @@ class Subcommand:
             subparser.add_argument(*args, **kwargs)
 
     def run_with_args(self, args):
-        forward_args = self.args_to_forward(args)
-        self.run(**forward_args)
+        context = self.make_exec_context()
+        context.update(**vars(args))
+        forward_args = self.args_to_forward(context)
+        with self.enter_context_managers(forward_args) as run_context:
+            self.run(**run_context)
 
-    def args_to_forward(self, args):
+    def args_to_forward(self, arg_dict):
         sig = inspect.signature(self.run)
         if self.uses_kwargs(sig):
-            return vars(args)
+            return arg_dict
         else:
             names = self.keyword_parameters(sig)
-            forward_args = self.dict_subset(vars(args), names)
-            return forward_args
+            return self.dict_subset(arg_dict, names)
 
     def uses_kwargs(self, signature):
         return any(p.kind == p.VAR_KEYWORD for p in signature.parameters.values())
@@ -62,6 +66,20 @@ class Subcommand:
 
     def dict_subset(self, d, names):
         return {name: value for (name, value) in d.items() if name in names}
+
+    def make_exec_context(self):
+        return {"session": managed_session()}
+
+    @contextlib.contextmanager
+    def enter_context_managers(self, arg_dict):
+        with contextlib.ExitStack() as stack:
+            yield {
+                name: self.enter_if_context_manager(val, stack)
+                for (name, val) in arg_dict.items()
+            }
+
+    def enter_if_context_manager(self, val, stack):
+        return stack.enter_context(val) if hasattr(val, "__enter__") else val
 
 
 def argument(*args, **kwargs):
