@@ -26,8 +26,6 @@ class Terminal:
         self.prompt_mgr = None
         self.echo_state = EchoOptionState()
 
-        logger.debug(f"new term:{id(self)} " f"with echo opt:{id(self.echo_state)}")
-
     async def __aenter__(self):
         return self
 
@@ -59,7 +57,7 @@ class Terminal:
             text = StreamParser.UserData(text)
 
         out_data = self.encoder.stuff(text)
-        logger.debug(f"writing term:{id(self)} data:{out_data!r}")
+        logger.debug("writing", extra={"data": out_data})
         self.writer.write(out_data)
 
     @contextlib.contextmanager
@@ -112,7 +110,7 @@ class Terminal:
 
     async def fetch_updates(self):
         data = await self.reader.read(self.READ_SIZE)
-        logger.debug(f"read term:{id(self)} data:{data!r}")
+        logger.debug("read", extra={"data": data})
         if not data:
             raise EOFError()
 
@@ -143,7 +141,7 @@ class Terminal:
     def handle_update(self, update):
         handle = getattr(self, "update_" + update.__class__.__name__, None)
         if not handle:
-            logger.info(f"unhandled update:{update} on term:{id(self)}")
+            logger.info("unhandled update", extra={"update": update})
             return
 
         return handle(update)
@@ -172,17 +170,17 @@ class Terminal:
         if not request.state:
             # client is rejecting this option. we only send it when it's
             # requested, so it's safe to ignore this.
-            logger.debug(f"ignoring unmatched request:{request} on term:{id(self)}")
+            logger.debug("ignoring unmatched request", extra={"request": request})
             return
 
         if request.host == StreamParser.Host.LOCAL:
             # client is requesting a TM.
-            logger.info(f"ACCEPTING request:{request} on term:{id(self)}")
+            logger.info(f"ACCEPTING", extra={"request": request})
             self.line_buffer.annotate(self.TimingMark(request))
             return
 
         # otherwise client is sending us a TM, which we didn't request. ignore it.
-        logger.debug(f"ignoring unrequested request:{request} on term:{id(self)}")
+        logger.debug("ignoring unrequested request", extra={"request": request})
 
     def option_ECHO(self, request):
         return self.echo_state.handle_negotiation(request)
@@ -190,13 +188,13 @@ class Terminal:
     def option_unhandled(self, request):
         if request.state:
             # Peer is requesting an unsupported option. Refuse.
-            logger.info(f"rejecting request:{request} on term:{id(self)}")
+            logger.info("rejecting option", extra={"request": request})
             return request.refuse()
 
         # else client is requesting to disable an option. we support no
         # options, so all are off. ignore it.
         else:
-            logger.debug(f"ignoring request:{request} on term:{id(self)}")
+            logger.debug("ignoring option", extra={"request": request})
 
     # telnet commands
 
@@ -213,10 +211,10 @@ class Terminal:
         return handler or self.command_unhandled
 
     def command_unhandled(self, command):
-        logger.info(f"unhandled command:{command} on term:{id(self)}")
+        logger.info("unhandled command", extra={"command": command})
 
     def command_IP(self, command):
-        logger.debug(f"interrupt process on term:{id(self)}")
+        logger.debug("interrupt process")
         # Currently we only ever read peer input during prompting, so
         # there's no process to interrupt. For bonus complexity there's a
         # fair chance the peer will send a timing mark request and discard
@@ -273,7 +271,7 @@ class EchoOptionState:
 
     def local_OFF(self, state):
         if state:
-            logger.debug(f"REQUESTING host echo on opt:{id(self)}")
+            logger.debug("REQUESTING host echo")
             self.state = self.State.REQUESTED
             return self.make_negotiation(True)
         # Else currently off, host wants off.
@@ -283,7 +281,7 @@ class EchoOptionState:
             # We've already requested, nothing new to do.
             pass
         else:
-            logger.debug(f"CANCELING host echo request on opt:{id(self)}")
+            logger.debug("CANCELING host echo request")
             return self.make_negotiation(False)
 
     def local_ON(self, state):
@@ -291,7 +289,7 @@ class EchoOptionState:
             # We're already on, nothing new to do.
             pass
         else:
-            logger.debug(f"DEMANDING host echo off on opt:{id(self)}")
+            logger.debug("DEMANDING host echo off")
             return self.make_negotiation(False)
 
     def make_negotiation(self, state):
@@ -309,7 +307,7 @@ class EchoOptionState:
         # We never approve peer echo. It's always off, so if peer says off
         # then it's noop, and if peer requests on then we refuse.
         if neg.state:
-            logger.debug("REFUSING peer echo request on opt:{id(self)}")
+            logger.debug("REFUSING peer echo request")
             return neg.refuse()
 
     def negotiation_LOCAL(self, neg):
@@ -319,16 +317,16 @@ class EchoOptionState:
     def negotiation_LOCAL_OFF(self, neg):
         if neg.state:
             # Peer requesting on. Refuse.
-            logger.debug("REFUSING host echo request on opt:{id(self)}")
+            logger.debug("REFUSING host echo request")
             return neg.refuse()
         # Otherwise peer affirming off. No-op.
 
     def negotiation_LOCAL_REQUESTED(self, neg):
         if neg.state:
-            logger.debug("peer ACCEPTED host echo on opt:{id(self)}")
+            logger.debug("peer ACCEPTED host echo")
             self.state = self.State.ON
         else:
-            logger.debug("peer REFUSED host echo on opt:{id(self)}")
+            logger.debug("peer REFUSED host echo")
             self.state = self.State.OFF
 
     def negotiation_LOCAL_ON(self, neg):
@@ -336,6 +334,6 @@ class EchoOptionState:
             # Peer affirming on. No-op.
             pass
         else:
-            logger.debug("peer DEMANDING no host echo on opt:{id(self)}")
+            logger.debug("peer DEMANDING no host echo")
             self.state = self.State.OFF
             return neg.accept()
