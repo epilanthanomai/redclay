@@ -13,7 +13,7 @@ $ pre-commit install
 # run the tests
 $ tox
 # run the game
-$ python -m redclay.game
+$ python -m redclay
 # connect to the game (from another terminal)
 $ telnet localhost 6666
 ```
