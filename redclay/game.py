@@ -124,8 +124,3 @@ async def run_server():
     server = await asyncio.start_server(Shell.run_client, "0.0.0.0", 6666)
     async with server:
         await server.serve_forever()
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    asyncio.run(run_server())
