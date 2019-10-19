@@ -1,7 +1,8 @@
-import asyncio
-import logging
+from redclay.logging import init_logging
 
+init_logging()
+
+import asyncio
 from redclay.game import run_server
 
-logging.basicConfig(level=logging.DEBUG)
 asyncio.run(run_server())
