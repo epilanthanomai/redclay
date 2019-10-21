@@ -2,7 +2,7 @@ from redclay.logging import init_logging
 
 init_logging()
 
-import asyncio
-from redclay.game import run_server
+import sys
+from redclay.shell_command import run_from_argv
 
-asyncio.run(run_server())
+run_from_argv(sys.argv[1:])

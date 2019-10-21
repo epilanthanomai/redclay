@@ -4,6 +4,7 @@ import re
 import textwrap
 
 from redclay.logging import logging_context
+from redclay.shell_command import subcommand
 from redclay.terminal import Terminal
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,12 @@ GOODBYE = textwrap.dedent(
 )
 
 
-async def run_server():
+@subcommand()
+def run_server():
+    asyncio.run(async_run_server())
+
+
+async def async_run_server():
     server = await asyncio.start_server(bootstrap_connection, "0.0.0.0", 6666)
     async with server:
         await server.serve_forever()

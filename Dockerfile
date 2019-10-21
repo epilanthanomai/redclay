@@ -7,4 +7,4 @@ COPY . /redclay
 RUN pipenv install
 
 ENTRYPOINT ["pipenv", "run"]
-CMD ["python", "-m", "redclay"]
+CMD ["python", "-m", "redclay", "run_server"]
