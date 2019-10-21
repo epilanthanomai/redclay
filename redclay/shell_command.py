@@ -13,8 +13,10 @@ class ArgumentParser(argparse.ArgumentParser):
             self._subparsers = self.add_subparsers()
         return self._subparsers
 
-    def add_subcommand(self, import_path):
-        subcommand = self.load_subcommand(import_path)
+    def add_subcommand(self, spec):
+        subcommand = getattr(spec, "redclay_subcommand", None) or self.load_subcommand(
+            spec
+        )
         subparser = self.subparsers.add_parser(subcommand.get_name())
         subparser.set_defaults(subcommand=subcommand)
 
@@ -46,9 +48,10 @@ def subcommand(*args, **kwargs):
     return wrap
 
 
-def run_from_argv(*args):
+def run_from_argv(subcommands, *args):
     parser = ArgumentParser(description="a Georgia MUD")
-    parser.add_subcommand("redclay.game.run_server")
+    for subcommand in subcommands:
+        parser.add_subcommand(subcommand)
 
     args = parser.parse_args(*args)
     args.subcommand.run_with_args(args)
