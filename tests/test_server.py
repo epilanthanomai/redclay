@@ -48,16 +48,19 @@ async def test_run_server_callback(mock_start_server, MockConnectionServer):
 
 @patch("redclay.server.Terminal")
 @patch("redclay.server.logging_context", wraps=redclay.logging.logging_context)
-async def test_handle_connection(mock_logging_context, MockTerminal):
+@patch("redclay.server.Connection")
+async def test_handle_connection(MockConnection, mock_logging_context, MockTerminal):
     run_shell = CoroutineMock()
     reader = Mock()
     writer = Mock()
     mock_terminal = MockTerminal.return_value
     mock_terminal.__aenter__.return_value = mock_terminal
+    mock_connection = MockConnection.return_value
 
     conn_server = ConnectionServer()
     await conn_server.handle_connection(run_shell, reader, writer)
 
     MockTerminal.assert_called_once_with(reader, writer)
     mock_logging_context.assert_called_once_with(term=id(mock_terminal))
-    run_shell.assert_called_once_with(mock_terminal)
+    MockConnection.assert_called_once_with(mock_terminal)
+    run_shell.assert_called_once_with(mock_connection)

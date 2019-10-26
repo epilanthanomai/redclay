@@ -26,14 +26,14 @@ GOODBYE = textwrap.dedent(
 )
 
 
-async def run_shell(term):
-    await term.write(BANNER)
-    username = await run_authentication(term)
+async def run_shell(conn):
+    await conn.send_message(BANNER)
+    username = await run_authentication(conn)
     if username:
         logger.info("successful login", extra={"username": username})
-        await term.write(WELCOME.format(user=username))
-        await run_command_loop(term, username)
-        await term.write(GOODBYE)
+        await conn.send_message(WELCOME.format(user=username))
+        await run_command_loop(conn, username)
+        await conn.send_message(GOODBYE)
     else:
         logger.debug("closing without login")
 
@@ -46,30 +46,30 @@ async def run_shell(term):
 USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{2,31}$")
 
 
-async def run_authentication(term):
+async def run_authentication(conn):
     for _ in range(3):
-        username = await login_once(term)
+        username = await login_once(conn)
         if username is not None:
             return username
         else:
-            await term.sleep(1)
+            await conn.sleep(1)
 
 
-async def login_once(term):
-    username = await input_username(term)
+async def login_once(conn):
+    username = await input_username(conn)
     if not username:
-        await term.write("Invalid username.\n\n")
+        await conn.send_message("Invalid username.\n\n")
         return
-    password = await input_password(term)
+    password = await input_password(conn)
     if authenticate(username, password):
         return username
     else:
         logger.info("failed login", extra={"user": username})
-        await term.write("Login failed.\n\n")
+        await conn.send_message("Login failed.\n\n")
 
 
-async def input_username(term):
-    raw_username = await term.input("Username: ")
+async def input_username(conn):
+    raw_username = await conn.input("Username: ")
     stripped = raw_username.strip()
     if USERNAME_RE.match(stripped):
         return stripped
@@ -77,8 +77,8 @@ async def input_username(term):
         logger.debug("invalid username", extra={"user": raw_username})
 
 
-async def input_password(term):
-    raw_password = await term.input_secret("Password: ")
+async def input_password(conn):
+    raw_password = await conn.input_secret("Password: ")
     return raw_password.rstrip("\n")
 
 
@@ -91,15 +91,15 @@ def authenticate(username, password):
 #
 
 
-async def run_command_loop(term, username):
+async def run_command_loop(conn, username):
     while True:
-        line = await input_echo_line(term, username)
+        line = await input_echo_line(conn, username)
         if line == "quit":
             break
         if line:
-            await term.write(line + "\n")
+            await conn.send_message(line + "\n")
 
 
-async def input_echo_line(term, username):
-    line = await term.input(f"{username}> ")
+async def input_echo_line(conn, username):
+    line = await conn.input(f"{username}> ")
     return line.strip()

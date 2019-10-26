@@ -24,7 +24,8 @@ class ConnectionServer:
                         "new connection",
                         extra={"peer": peername, "sock": sockname, "fd": fileno},
                     )
-                    await run_shell(term)
+                    conn = Connection(term)
+                    await run_shell(conn)
                     logger.debug("shell exited normally")
                 except EOFError:
                     logger.info("connection closed by peer")
@@ -32,6 +33,23 @@ class ConnectionServer:
                     logger.exception("connection closing from unhandled exception")
                 else:
                     logger.info("connection closing normally")
+
+
+class Connection:
+    def __init__(self, term):
+        self.term = term
+
+    async def send_message(self, message):
+        return await self.term.write(message)
+
+    async def sleep(self, seconds):
+        return await self.term.sleep(seconds)
+
+    async def input(self, prompt):
+        return await self.term.input(prompt)
+
+    async def input_secret(self, prompt):
+        return await self.term.input_secret(prompt)
 
 
 @subcommand()
