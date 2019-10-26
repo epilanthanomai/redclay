@@ -1,11 +1,6 @@
-import asyncio
 import logging
 import re
 import textwrap
-
-from redclay.logging import logging_context
-from redclay.shell_command import subcommand
-from redclay.terminal import Terminal
 
 logger = logging.getLogger(__name__)
 
@@ -29,40 +24,6 @@ GOODBYE = textwrap.dedent(
     Goodbye!
     """
 )
-
-
-@subcommand()
-def run_server():
-    asyncio.run(async_run_server())
-
-
-async def async_run_server():
-    server = await asyncio.start_server(bootstrap_connection, "0.0.0.0", 6666)
-    async with server:
-        await server.serve_forever()
-
-
-async def bootstrap_connection(reader, writer):
-    async with Terminal(reader, writer) as term:
-        with logging_context(term=id(term)):
-            try:
-                fileno = writer.get_extra_info("socket").fileno()
-                peername = writer.get_extra_info("peername")
-                sockname = writer.get_extra_info("sockname")
-
-                logger.info(
-                    "new connection",
-                    extra={"peer": peername, "sock": sockname, "fd": fileno},
-                )
-
-                await run_shell(term)
-                logger.debug(f"shell exited normally")
-            except EOFError:
-                logger.info("connection closed by peer")
-            except:
-                logger.exception("connection closing from unhandled exception")
-            else:
-                logger.info("connection closing normally")
 
 
 async def run_shell(term):
