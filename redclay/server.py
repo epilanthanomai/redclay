@@ -38,6 +38,18 @@ class ConnectionServer:
 class Connection:
     def __init__(self, term):
         self.term = term
+        self.context_stack = [{}]
+        self.running = True
+
+    # context management
+
+    def context(self):
+        return self.context_stack[-1]
+
+    def __getitem__(self, key):
+        return self.context().get(key, None)
+
+    # connection actions
 
     async def send_message(self, message):
         return await self.term.write(message)
@@ -50,6 +62,24 @@ class Connection:
 
     async def input_secret(self, prompt):
         return await self.term.input_secret(prompt)
+
+    def _set_context(self, **kwargs):
+        self.context().update(**kwargs)
+
+    async def set_context(self, **kwargs):
+        self._set_context(**kwargs)
+
+    async def push(self, **kwargs):
+        new_frame = self.context().copy()
+        self.context_stack.append(new_frame)
+        self._set_context(**kwargs)
+
+    async def pop(self, **kwargs):
+        self.context_stack.pop()
+        self._set_context(**kwargs)
+
+    async def stop(self):
+        self.running = False
 
 
 @subcommand()

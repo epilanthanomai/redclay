@@ -5,9 +5,15 @@ from asynctest import CoroutineMock, Mock, patch
 
 import redclay.game
 import redclay.server
-from redclay.server import ConnectionServer, async_run_server
+from redclay.server import ConnectionServer, Connection, async_run_server
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture
+def connection():
+    terminal = Mock()
+    return Connection(terminal)
 
 
 @patch("redclay.server.ConnectionServer")
@@ -64,3 +70,33 @@ async def test_handle_connection(MockConnection, mock_logging_context, MockTermi
     mock_logging_context.assert_called_once_with(term=id(mock_terminal))
     MockConnection.assert_called_once_with(mock_terminal)
     run_shell.assert_called_once_with(mock_connection)
+
+
+async def test_connection_set_context(connection):
+    await connection.set_context(a=1, b=2)
+    assert connection.context() == {"a": 1, "b": 2}
+    await connection.set_context(b=3, c=4)
+    assert connection.context() == {"a": 1, "b": 3, "c": 4}
+
+
+async def test_connection_stack(connection):
+    await connection.set_context(a=1, b=2)
+    await connection.push()
+    await connection.set_context(b=3, c=4)
+    assert connection.context() == {"a": 1, "b": 3, "c": 4}
+    await connection.pop()
+    assert connection.context() == {"a": 1, "b": 2}
+
+
+async def test_connection_stack_setters(connection):
+    await connection.set_context(a=1, b=2)
+    await connection.push(b=3, c=4)
+    assert connection.context() == {"a": 1, "b": 3, "c": 4}
+    await connection.pop(d=5, a=6)
+    assert connection.context() == {"a": 6, "b": 2, "d": 5}
+
+
+async def test_connection_getitem(connection):
+    await connection.set_context(a=1, b=2)
+    assert connection["a"] == 1
+    assert connection["d"] is None
