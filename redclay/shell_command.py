@@ -3,7 +3,7 @@ import contextlib
 import importlib
 import inspect
 
-from redclay.dbsession import managed_session
+from redclay.dbsession import get_session_maker, managed_session
 from redclay.funcutil import cached
 
 
@@ -68,7 +68,8 @@ class Subcommand:
         return {name: value for (name, value) in d.items() if name in names}
 
     def make_exec_context(self):
-        return {"session": managed_session()}
+        Session = get_session_maker()
+        return {"Session": Session, "session": managed_session(Session)}
 
     @contextlib.contextmanager
     def enter_context_managers(self, arg_dict):

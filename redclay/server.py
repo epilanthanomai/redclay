@@ -3,6 +3,7 @@ import contextlib
 import functools
 import logging
 
+from redclay.dbsession import managed_session
 from redclay.game import boot
 from redclay.logging import logging_context
 from redclay.shell_command import subcommand
@@ -12,6 +13,9 @@ logger = logging.getLogger(__name__)
 
 
 class ConnectionServer:
+    def __init__(self, Session):
+        self.Session = Session
+
     async def handle_connection(self, boot, reader, writer):
         async with Terminal(reader, writer) as term:
             with logging_context(term=id(term)):
@@ -24,7 +28,7 @@ class ConnectionServer:
                         "new connection",
                         extra={"peer": peername, "sock": sockname, "fd": fileno},
                     )
-                    conn = Connection(term)
+                    conn = Connection(self.Session, term)
                     await self.run_conn(conn, boot)
                     logger.debug("shell exited normally")
                 except EOFError:
@@ -43,7 +47,8 @@ class ConnectionServer:
         prompt = conn["prompt"]
         raw_user_input = await self.get_user_input(conn)
         processed_input = raw_user_input.strip()
-        await prompt.handle_input(conn, processed_input)
+        with conn.get_managed_session():
+            await prompt.handle_input(conn, processed_input)
 
     async def get_user_input(self, conn):
         prompt = conn["prompt"]
@@ -57,10 +62,23 @@ class ConnectionServer:
 
 
 class Connection:
-    def __init__(self, term):
+    def __init__(self, Session, term):
+        self.Session = Session
+        self.session = None
         self.term = term
         self.context_stack = [{}]
         self.running = True
+
+    # session management
+
+    @contextlib.contextmanager
+    def get_managed_session(self):
+        with managed_session(self.Session) as session:
+            self.session = session
+            try:
+                yield session
+            finally:
+                self.session = None
 
     # context management
 
@@ -98,12 +116,12 @@ class Connection:
 
 
 @subcommand()
-def run_server():
-    asyncio.run(async_run_server())
+def run_server(Session):
+    asyncio.run(async_run_server(Session))
 
 
-async def async_run_server():
-    conn_server = ConnectionServer()
+async def async_run_server(Session):
+    conn_server = ConnectionServer(Session)
     handle = functools.partial(conn_server.handle_connection, boot)
     io_server = await asyncio.start_server(handle, "0.0.0.0", 6666)
     async with io_server:

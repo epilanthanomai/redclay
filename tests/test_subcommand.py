@@ -1,7 +1,10 @@
+from unittest.mock import patch
 from redclay.shell_command import subcommand, run_from_argv
 
 
-def test_run_right_command():
+@patch("redclay.shell_command.get_session_maker")
+@patch("redclay.shell_command.managed_session")
+def test_run_right_command(mock_get_session_maker, mock_managed_session):
     test_value = {}
 
     @subcommand()

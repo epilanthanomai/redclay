@@ -12,8 +12,7 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture
 def connection():
-    terminal = Mock()
-    return Connection(terminal)
+    return Connection(Mock(), Mock())
 
 
 @pytest.fixture
@@ -48,8 +47,9 @@ async def test_run_server_callback(mock_start_server, MockConnectionServer):
     mock_start_server.return_value = mock_io_server
     mock_connection_server = Mock(handle_connection=CoroutineMock())
     MockConnectionServer.return_value = mock_connection_server
+    Session = Mock()
 
-    await async_run_server()
+    await async_run_server(Session)
 
     mock_start_server.assert_called_once()
     mock_start_server.return_value.serve_forever.assert_called_once_with()
@@ -80,15 +80,16 @@ async def test_handle_connection_fast_path(
 
     mock_terminal = MockTerminal.return_value
     mock_connection = MockConnection.return_value
+    Session = Mock()
     reader = Mock()
     writer = Mock()
 
-    conn_server = ConnectionServer()
+    conn_server = ConnectionServer(Session)
     await conn_server.handle_connection(boot, reader, writer)
 
     MockTerminal.assert_called_once_with(reader, writer)
     mock_logging_context.assert_called_once_with(term=id(mock_terminal))
-    MockConnection.assert_called_once_with(mock_terminal)
+    MockConnection.assert_called_once_with(Session, mock_terminal)
 
 
 @patch("redclay.server.Terminal", new_callable=mock_Terminal)
@@ -111,7 +112,7 @@ async def test_handle_connection_runs_prompt(MockTerminal):
     mock_terminal = MockTerminal.return_value
     mock_terminal.input.return_value = "test input\n"
 
-    conn_server = ConnectionServer()
+    conn_server = ConnectionServer(Mock())
     await conn_server.handle_connection(boot, Mock(), Mock())
 
     mock_terminal.input.assert_called_once_with(CaptureAndStop.prompt)
@@ -139,7 +140,7 @@ async def test_handle_connection_runs_obscured_prompt(MockTerminal):
     mock_terminal = MockTerminal.return_value
     mock_terminal.input_secret.return_value = "test input\n"
 
-    conn_server = ConnectionServer()
+    conn_server = ConnectionServer(Mock())
     await conn_server.handle_connection(boot, Mock(), Mock())
 
     mock_terminal.input_secret.assert_called_once_with(CaptureAndStopObscured.prompt)
@@ -167,7 +168,7 @@ async def test_handle_connection_calls_prompt():
         captured_boot_conn = conn
         await conn.push(prompt=prompt)
 
-    conn_server = ConnectionServer()
+    conn_server = ConnectionServer(Mock())
     await conn_server.handle_connection(boot, Mock(), Mock())
 
     assert prompt.captured_prompt_conn == captured_boot_conn
@@ -192,7 +193,7 @@ async def test_handle_connection_loops():
     async def boot(conn):
         await conn.push(prompt=prompt)
 
-    conn_server = ConnectionServer()
+    conn_server = ConnectionServer(Mock())
     await conn_server.handle_connection(boot, Mock(), Mock())
 
     assert prompt.inputs_handled == 3
