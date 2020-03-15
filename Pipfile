@@ -5,10 +5,11 @@ verify_ssl = true
 
 [dev-packages]
 asynctest = "*"
+black = "*"
 pytest = "*"
 pytest-asyncio = "*"
-black = "*"
 pre-commit = "*"
+tox = "*"
 
 [packages]
 
