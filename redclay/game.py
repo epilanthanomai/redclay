@@ -1,6 +1,8 @@
 import logging
-import re
 import textwrap
+
+from redclay.auth import Account
+
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +33,10 @@ async def fail_actions(conn):
 
 
 class UsernamePrompt:
-    USERNAME_RE = re.compile(r"^[A-Za-z][A-Za-z0-9_-]{2,31}$")
     prompt = "Username: "
 
     async def handle_input(self, conn, username):
-        if not self.USERNAME_RE.match(username):
+        if not Account.valid_username(username):
             await conn.send_message("Invalid username.\n\n")
             await fail_actions(conn)
         else:
