@@ -6,12 +6,15 @@ verify_ssl = true
 [dev-packages]
 asynctest = "*"
 black = "*"
+pre-commit = "*"
 pytest = "*"
 pytest-asyncio = "*"
-pre-commit = "*"
+psycopg2 = "*"
 tox = "*"
 
 [packages]
+sqlalchemy = "*"
+alembic = "*"
 
 [requires]
 python_version = "3.7"
